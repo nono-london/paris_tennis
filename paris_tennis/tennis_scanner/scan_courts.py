@@ -78,7 +78,6 @@ class ParisTennis:
         await self.page.wait_for_timeout(50000)
 
 
-
 @dataclass(repr=True)
 class TennisCourtSummary:
     tennis_date: datetime = datetime(1900, 1, 1)
