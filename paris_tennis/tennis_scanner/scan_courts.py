@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from typing import List, Union, Optional
 from bs4 import BeautifulSoup as bs
-from numpy.f2py.symbolic import COUNTER
+
 from playwright.async_api import async_playwright, Page, Browser
 
 from paris_tennis.app_config import get_tennis_names
