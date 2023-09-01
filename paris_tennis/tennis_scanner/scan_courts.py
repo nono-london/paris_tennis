@@ -9,6 +9,12 @@ from paris_tennis.app_config import get_tennis_names
 from dataclasses import dataclass
 
 
+@dataclass(repr=True)
+class TennisCourtSummary:
+    tennis_date: datetime = datetime(1900, 1, 1)
+    available_courts: int = 0
+
+
 class ParisTennis:
     def __init__(self, headless: bool = False):
         self.headless: bool = headless
@@ -45,12 +51,14 @@ class ParisTennis:
         submit_element = self.page.locator('xpath=//button[@id="rechercher"]')
         await submit_element.click(delay=100)
 
-    async def get_available_dates(self):
+    async def get_available_dates(self) -> Union[None, List[TennisCourtSummary]]:
         page_source = await self.page.content()
         web_soup = bs(page_source, 'lxml')
 
         court_dates = web_soup.find_all(name='div', attrs={'class': 'date-item'})
-        print(len(court_dates))
+        if len(court_dates) != 7:
+            print(f"Error while getting the number of dates available")
+            return None
         #
         for court_date in court_dates:
             tennis_court_summary = TennisCourtSummary()
@@ -60,13 +68,15 @@ class ParisTennis:
                 court_date_str = court_date_el.get('dateiso')
                 if court_date:
                     tennis_court_summary.tennis_date = datetime.strptime(court_date_str, '%d/%m/%Y')
-                print(tennis_court_summary.tennis_date)
+
             # get number of courts available
             court_number_el = court_date.find(name='div', attrs={'class': 'digits'})
             if court_number_el:
                 court_number = court_number_el.get_text()
                 tennis_court_summary.available_courts = int(court_number)
             self.tennis_summaries.append(tennis_court_summary)
+
+        return self.tennis_summaries
 
     async def check_all_availabilities(self):
         await self.select_a_court()
@@ -76,12 +86,6 @@ class ParisTennis:
         print(self.tennis_summaries)
 
         await self.page.wait_for_timeout(50000)
-
-
-@dataclass(repr=True)
-class TennisCourtSummary:
-    tennis_date: datetime = datetime(1900, 1, 1)
-    available_courts: int = 0
 
 
 if __name__ == '__main__':
