@@ -1,0 +1,22 @@
+# scraping
+requests
+aiohttp[speedups]
+aiofiles
+playwright
+lxml
+bs4
+html5
+
+# data analysis
+pandas
+numpy
+matplotlib
+
+
+# python -m venv .venv
+
+# python -m pip install --upgrade pip
+# python.exe -m pip install --upgrade pip
+
+# pip install -r requirements.txt
+# pip install -r requirements.txt --upgrade

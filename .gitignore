@@ -1,0 +1,11 @@
+.venv
+venv
+.idea
+.env
+.vscode
+
+__pycache__
+.pytest_cache
+
+app_config_secret.py
+/paris_tennis/downloads
