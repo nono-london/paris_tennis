@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Union, Optional
 from bs4 import BeautifulSoup as bs
 
-from playwright.async_api import async_playwright, Page, Browser
+from playwright.async_api import async_playwright, Page, Browser, Locator, TimeoutError
 
 from paris_tennis.app_config import get_tennis_names
 from dataclasses import dataclass
@@ -78,13 +78,25 @@ class ParisTennis:
 
         return self.tennis_summaries
 
+    async def loop_through_week(self):
+        # find date elements
+        week_date_els: List[Locator] = await self.page.locator("xpath=// div[@class='date-item']").all()
+        print(f'Size of date elements: {len(week_date_els)}')
+        for week_date_el in week_date_els:
+            print(await week_date_el.text_content())
+            try:
+                await week_date_el.click(delay=2000)
+            except TimeoutError:
+                print(f"Error while clicking on element")
+
+
     async def check_all_availabilities(self):
         await self.select_a_court()
         await self.page.wait_for_timeout(5000)
 
         await self.get_available_dates()
         print(self.tennis_summaries)
-
+        await self.loop_through_week()
         await self.page.wait_for_timeout(50000)
 
 
