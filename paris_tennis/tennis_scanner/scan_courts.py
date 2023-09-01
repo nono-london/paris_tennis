@@ -69,7 +69,7 @@ class ParisTennis:
                 if court_date:
                     tennis_court_summary.tennis_date = datetime.strptime(court_date_str, '%d/%m/%Y')
 
-            # get number of courts available
+            # get number of courts available, if None, means no courts are available
             court_number_el = court_date.find(name='div', attrs={'class': 'digits'})
             if court_number_el:
                 court_number = court_number_el.get_text()
