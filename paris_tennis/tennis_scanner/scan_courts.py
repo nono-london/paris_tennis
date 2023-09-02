@@ -173,8 +173,14 @@ class ParisTennis:
             await self.page.close()
             await self.browser.close()
 
-        print(self.tennis_summaries)
-        print(await self.get_results_as_df(save_locally=True))
+        # print(self.tennis_summaries)
+        results_df = await self.get_results_as_df(save_locally=True)
+        if len(results_df) > 0:
+            print(f'Downloaded successfully {len(results_df)} available courts.\n'
+                  f'For courts:')
+        else:
+            print(f'No data found for courts:')
+        print(*self.tennis_names)
 
     async def get_results_as_df(self, save_locally: bool = True) -> pd.DataFrame:
         save_date_time: datetime = datetime.utcnow()
@@ -202,5 +208,4 @@ class ParisTennis:
 
 if __name__ == '__main__':
     paris_tennis = ParisTennis(headless=True)
-
     asyncio.get_event_loop().run_until_complete(paris_tennis.check_all_availabilities())
