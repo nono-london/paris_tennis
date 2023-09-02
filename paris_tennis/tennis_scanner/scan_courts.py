@@ -56,7 +56,7 @@ class ParisTennis:
     async def start_browser(self):
         if not self.page or not self.browser or self.page.is_closed() or not self.browser.is_connected():
             self.APW = await async_playwright().start()
-            self.browser = await self.APW.webkit.launch(headless=self.headless)
+            self.browser = await self.APW.firefox.launch(headless=self.headless)
             self.page = await self.browser.new_page()
 
     async def select_a_court(self, tennis_name: Optional[str] = None):
