@@ -10,10 +10,33 @@ from paris_tennis.app_config import get_tennis_names
 
 
 @dataclass(repr=True)
+class CourtType:
+    tennis_indoor: bool = False
+    tennis_hour: int = -1
+    court_number: int = -1
+
+    @staticmethod
+    def is_indoor(tennis_desc: str) -> bool:
+        print(tennis_desc)
+        return "Découvert" not in tennis_desc
+
+    @staticmethod
+    def get_tennis_number(tennis_desc: str) -> int:
+        court_number = -1
+        try:
+            court_number = tennis_desc.split("Court N°")[-1].split(" ")[0].strip()
+            court_number = int(court_number)
+        except ValueError as ex:
+            print(f'Issue while getting tennis court number from:"{tennis_desc}"\n'
+                  f'Error: {ex}')
+        return court_number
+
+
+@dataclass(repr=True)
 class TennisCourtSummary:
     tennis_date: datetime = datetime(1900, 1, 1)
     available_courts: int = 0
-    available_hours_courts: List = field(default_factory=lambda: list())
+    available_hours_courts: List[CourtType] = field(default_factory=lambda: list())
 
 
 class ParisTennis:
@@ -91,51 +114,57 @@ class ParisTennis:
                 # print(await week_date_els[index].text_content())
                 await week_date_els[index].click(delay=100)
                 await self.page.wait_for_timeout(5000)
+                await self.get_available_hours(self.tennis_summaries[index])
+
             except TimeoutError as ex:
                 print(ex)
                 print(f"Error while clicking on element")
                 continue
-            await self.get_available_hours()
+
             # refresh the list of elements as class names changes with JS selection
             week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
 
-    async def get_available_hours(self) -> List:
-        web_soup = bs(await self.page.content(),'lxml')
-        search_block_el=web_soup.find("div", attrs={'class':'search-result-block'})
-        hour_els:List=search_block_el.find_all("div",attrs={'class':"panel panel-default"})
+    async def get_available_hours(self, tennis_court: TennisCourtSummary) -> List:
+        web_soup = bs(await self.page.content(), 'lxml')
+        search_block_el = web_soup.find("div", attrs={'class': 'search-result-block'})
+        hour_els: List = search_block_el.find_all("div", attrs={'class': "panel panel-default"})
         print(f'Found {len(hour_els)} hours available')
         for hour_el in hour_els:
             # find hour
-            hour_str = hour_el.find("div", attrs={'class':'panel-heading'})
+            hour_str = hour_el.find("div", attrs={'class': 'panel-heading'})
             try:
-                hour_int =  hour_str.text.replace("h","").strip()
-                print(f'Hour available: {hour_int}')
+                hour_int = hour_str.text.replace("h", "").strip()
             except ValueError as ex:
                 print(f'Error while extracting hour: {ex}')
+                continue
             # find courts' details
             court_els = hour_el.find_all("div", attrs={'class': 'row tennis-court'})
             for court_el in court_els:
+                tennis_type = CourtType()
+                tennis_type.tennis_hour = int(hour_int)
                 # court number
-                court_number = court_el.find("span", attrs={"class":"court"})
+                court_number = court_el.find("span", attrs={"class": "court"})
                 try:
-                    print(court_number.text.strip())
+                    tennis_type.court_number = tennis_type.get_tennis_number(tennis_desc=court_number.text.strip())
                 except ValueError as ex:
                     print(f"Couldn't find court details, error: {ex}")
                 # couvert /decouvert
                 court_desc = court_el.find("small", attrs={"class": "price-description"})
                 try:
-                    print(court_desc.text.strip())
+                    tennis_type.tennis_indoor = tennis_type.is_indoor(tennis_desc=court_desc.text.strip())
                 except ValueError as ex:
                     print(f"Couldn't find court details, error: {ex}")
+                tennis_court.available_hours_courts.append(tennis_type)
 
     async def check_all_availabilities(self):
         await self.select_a_court()
         await self.page.wait_for_timeout(5000)
 
         await self.get_available_dates()
-        print(self.tennis_summaries)
+        # print(self.tennis_summaries)
         await self.loop_through_week()
         await self.page.wait_for_timeout(10000)
+        print(self.tennis_summaries)
 
 
 if __name__ == '__main__':
