@@ -180,15 +180,13 @@ class ParisTennis:
         save_date_time: datetime = datetime.utcnow()
         results = []
         for tennis_court_summary in self.tennis_summaries:
-            row = {'tennis_name': tennis_court_summary.tennis_name,
-                   'tennis_date': tennis_court_summary.tennis_date,
-                   'available_courts': tennis_court_summary.available_courts
-                   }
             for available_court in tennis_court_summary.available_hours_courts:
-                row['tennis_indoor'] = available_court.tennis_indoor
-                row['tennis_hour'] = available_court.tennis_hour
-                row['court_number'] = available_court.court_number
-
+                row = {'tennis_name': tennis_court_summary.tennis_name,
+                       'tennis_date': tennis_court_summary.tennis_date,
+                       'available_courts': tennis_court_summary.available_courts,
+                       'tennis_indoor': available_court.tennis_indoor,
+                       'tennis_hour': available_court.tennis_hour,
+                       'court_number': available_court.court_number}
                 results.append(row)
 
         results_df = pd.DataFrame(results)
