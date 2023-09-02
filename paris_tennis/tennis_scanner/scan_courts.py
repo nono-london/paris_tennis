@@ -1,13 +1,16 @@
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import List, Union, Optional
 
+import pandas as pd
 from bs4 import BeautifulSoup as bs
 from playwright.async_api import async_playwright, Page, Browser, Locator, TimeoutError
-
-from paris_tennis.app_config import get_tennis_names
 from tqdm import tqdm
+
+from paris_tennis.app_config import get_tennis_names, get_project_download_path
+
 
 @dataclass(repr=True)
 class CourtType:
@@ -104,28 +107,6 @@ class ParisTennis:
 
         return tennis_summaries
 
-    async def loop_through_week(self, tennis_court_summary: List[TennisCourtSummary]):
-        await self.page.wait_for_timeout(5000)
-        week_days_xpath: str = "xpath=// div[contains(@class,'date-item')]"
-        # find date elements
-        week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
-        # print(f'Size of date elements: {len(week_date_els)}')
-        for index, week_date_el in enumerate(week_date_els, start=0):
-            # print(f'Day: {index + 1}')
-            try:
-                await week_date_els[index].click(delay=100)
-                await self.page.wait_for_timeout(5000)
-                await self.get_available_hours(tennis_court_summary[index])
-
-            except TimeoutError as ex:
-                print(ex)
-                print(f"Error while clicking on element")
-                continue
-
-            # refresh the list of elements as class names changes with JS selection
-            week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
-        self.tennis_summaries.extend(tennis_court_summary)
-
     async def get_available_hours(self, tennis_court: TennisCourtSummary):
         web_soup = bs(await self.page.content(), 'lxml')
         search_block_el = web_soup.find("div", attrs={'class': 'search-result-block'})
@@ -158,7 +139,29 @@ class ParisTennis:
                     print(f"Couldn't find court details, error: {ex}")
                 tennis_court.available_hours_courts.append(tennis_type)
 
-    async def check_all_availabilities(self):
+    async def loop_through_week(self, tennis_court_summary: List[TennisCourtSummary]):
+        await self.page.wait_for_timeout(5000)
+        week_days_xpath: str = "xpath=// div[contains(@class,'date-item')]"
+        # find date elements
+        week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
+        # print(f'Size of date elements: {len(week_date_els)}')
+        for index, week_date_el in enumerate(week_date_els, start=0):
+            # print(f'Day: {index + 1}')
+            try:
+                await week_date_els[index].click(delay=100)
+                await self.page.wait_for_timeout(5000)
+                await self.get_available_hours(tennis_court_summary[index])
+
+            except TimeoutError as ex:
+                print(ex)
+                print(f"Error while clicking on element")
+                continue
+
+            # refresh the list of elements as class names changes with JS selection
+            week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
+        self.tennis_summaries.extend(tennis_court_summary)
+
+    async def check_all_availabilities(self, save_locally: bool = True):
         tqdm_bar = tqdm(self.tennis_names)
 
         for tennis_name in tqdm_bar:
@@ -171,6 +174,33 @@ class ParisTennis:
             await self.browser.close()
 
         print(self.tennis_summaries)
+        print(await self.get_results_as_df(save_locally=True))
+
+    async def get_results_as_df(self, save_locally: bool = True) -> pd.DataFrame:
+        save_date_time: datetime = datetime.utcnow()
+        results = []
+        for tennis_court_summary in self.tennis_summaries:
+            row = {'tennis_name': tennis_court_summary.tennis_name,
+                   'tennis_date': tennis_court_summary.tennis_date,
+                   'available_courts': tennis_court_summary.available_courts
+                   }
+            for available_court in tennis_court_summary.available_hours_courts:
+                row['tennis_indoor'] = available_court.tennis_indoor
+                row['tennis_hour'] = available_court.tennis_hour
+                row['court_number'] = available_court.court_number
+
+                results.append(row)
+
+        results_df = pd.DataFrame(results)
+        results_df['save_date_time'] = save_date_time
+
+        if save_locally:
+            save_path: Path = Path(get_project_download_path(),
+                                   f"{save_date_time.strftime('%Y%m%d_%H')}_tennis_courts.csv")
+            results_df.to_csv(path_or_buf=save_path, sep=',', index=False)
+
+        return results_df
+
 
 if __name__ == '__main__':
     paris_tennis = ParisTennis(headless=True)
