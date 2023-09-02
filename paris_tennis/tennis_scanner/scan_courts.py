@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Union, Optional
 
@@ -13,6 +13,7 @@ from paris_tennis.app_config import get_tennis_names
 class TennisCourtSummary:
     tennis_date: datetime = datetime(1900, 1, 1)
     available_courts: int = 0
+    available_hours_courts: List = field(default_factory=lambda: list())
 
 
 class ParisTennis:
@@ -89,14 +90,43 @@ class ParisTennis:
             try:
                 # print(await week_date_els[index].text_content())
                 await week_date_els[index].click(delay=100)
-                # await self.page.wait_for_load_state(state="domcontentloaded")
                 await self.page.wait_for_timeout(5000)
             except TimeoutError as ex:
                 print(ex)
                 print(f"Error while clicking on element")
+                continue
+            await self.get_available_hours()
             # refresh the list of elements as class names changes with JS selection
             week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
 
+    async def get_available_hours(self) -> List:
+        web_soup = bs(await self.page.content(),'lxml')
+        search_block_el=web_soup.find("div", attrs={'class':'search-result-block'})
+        hour_els:List=search_block_el.find_all("div",attrs={'class':"panel panel-default"})
+        print(f'Found {len(hour_els)} hours available')
+        for hour_el in hour_els:
+            # find hour
+            hour_str = hour_el.find("div", attrs={'class':'panel-heading'})
+            try:
+                hour_int =  hour_str.text.replace("h","").strip()
+                print(f'Hour available: {hour_int}')
+            except ValueError as ex:
+                print(f'Error while extracting hour: {ex}')
+            # find courts' details
+            court_els = hour_el.find_all("div", attrs={'class': 'row tennis-court'})
+            for court_el in court_els:
+                # court number
+                court_number = court_el.find("span", attrs={"class":"court"})
+                try:
+                    print(court_number.text.strip())
+                except ValueError as ex:
+                    print(f"Couldn't find court details, error: {ex}")
+                # couvert /decouvert
+                court_desc = court_el.find("small", attrs={"class": "price-description"})
+                try:
+                    print(court_desc.text.strip())
+                except ValueError as ex:
+                    print(f"Couldn't find court details, error: {ex}")
 
     async def check_all_availabilities(self):
         await self.select_a_court()
