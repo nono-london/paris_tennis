@@ -12,6 +12,9 @@ pandas
 numpy
 matplotlib
 
+# UI
+tqdm
+
 
 # python -m venv .venv
 

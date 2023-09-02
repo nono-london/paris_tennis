@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup as bs
 from playwright.async_api import async_playwright, Page, Browser, Locator, TimeoutError
 
 from paris_tennis.app_config import get_tennis_names
-
+from tqdm import tqdm
 
 @dataclass(repr=True)
 class CourtType:
@@ -17,7 +17,6 @@ class CourtType:
 
     @staticmethod
     def is_indoor(tennis_desc: str) -> bool:
-        print(tennis_desc)
         return "Découvert" not in tennis_desc
 
     @staticmethod
@@ -34,6 +33,7 @@ class CourtType:
 
 @dataclass(repr=True)
 class TennisCourtSummary:
+    tennis_name: str = ""
     tennis_date: datetime = datetime(1900, 1, 1)
     available_courts: int = 0
     available_hours_courts: List[CourtType] = field(default_factory=lambda: list())
@@ -51,15 +51,15 @@ class ParisTennis:
         self.tennis_summaries: List[TennisCourtSummary] = list()
 
     async def start_browser(self):
-        if not self.page:
+        if not self.page or not self.browser or self.page.is_closed() or not self.browser.is_connected():
             self.APW = await async_playwright().start()
             self.browser = await self.APW.webkit.launch(headless=self.headless)
             self.page = await self.browser.new_page()
 
-    async def select_a_court(self, court_name: Optional[str] = None):
-        if not court_name:
-            court_name = self.tennis_names[0]
-        print(f'Launching search for court: {court_name}')
+    async def select_a_court(self, tennis_name: Optional[str] = None):
+        if not tennis_name:
+            tennis_name = self.tennis_names[0]
+        # print(f'Launching search for court: {tennis_name}')
 
         # check/start browser
         await self.start_browser()
@@ -68,14 +68,14 @@ class ParisTennis:
         # select court location
         where_token = self.page.locator('xpath=//*[@id="whereToken"]/ li / input')
         await where_token.click()
-        await self.page.keyboard.type(court_name, delay=100)
+        await self.page.keyboard.type(tennis_name, delay=100)
         await self.page.keyboard.press(key='ArrowDown', delay=100)
         await self.page.keyboard.press(key='Enter', delay=100)
 
         submit_element = self.page.locator('xpath=//button[@id="rechercher"]')
         await submit_element.click(delay=100)
 
-    async def get_available_dates(self) -> Union[None, List[TennisCourtSummary]]:
+    async def get_available_dates(self, tennis_name: str) -> Union[None, List[TennisCourtSummary]]:
         page_source = await self.page.content()
         web_soup = bs(page_source, 'lxml')
 
@@ -83,9 +83,11 @@ class ParisTennis:
         if len(court_dates) != 7:
             print(f"Error while getting the number of dates available")
             return None
+        tennis_summaries: List = []
         #
         for court_date in court_dates:
             tennis_court_summary = TennisCourtSummary()
+            tennis_court_summary.tennis_name = tennis_name
             # get court date
             court_date_el = court_date.find(name='div', attrs={'class': 'date'})
             if court_date_el:
@@ -98,23 +100,22 @@ class ParisTennis:
             if court_number_el:
                 court_number = court_number_el.get_text()
                 tennis_court_summary.available_courts = int(court_number)
-            self.tennis_summaries.append(tennis_court_summary)
+            tennis_summaries.append(tennis_court_summary)
 
-        return self.tennis_summaries
+        return tennis_summaries
 
-    async def loop_through_week(self):
+    async def loop_through_week(self, tennis_court_summary: List[TennisCourtSummary]):
         await self.page.wait_for_timeout(5000)
         week_days_xpath: str = "xpath=// div[contains(@class,'date-item')]"
         # find date elements
         week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
-        print(f'Size of date elements: {len(week_date_els)}')
+        # print(f'Size of date elements: {len(week_date_els)}')
         for index, week_date_el in enumerate(week_date_els, start=0):
-            print(f'Day: {index + 1}')
+            # print(f'Day: {index + 1}')
             try:
-                # print(await week_date_els[index].text_content())
                 await week_date_els[index].click(delay=100)
                 await self.page.wait_for_timeout(5000)
-                await self.get_available_hours(self.tennis_summaries[index])
+                await self.get_available_hours(tennis_court_summary[index])
 
             except TimeoutError as ex:
                 print(ex)
@@ -123,12 +124,13 @@ class ParisTennis:
 
             # refresh the list of elements as class names changes with JS selection
             week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
+        self.tennis_summaries.extend(tennis_court_summary)
 
-    async def get_available_hours(self, tennis_court: TennisCourtSummary) -> List:
+    async def get_available_hours(self, tennis_court: TennisCourtSummary):
         web_soup = bs(await self.page.content(), 'lxml')
         search_block_el = web_soup.find("div", attrs={'class': 'search-result-block'})
         hour_els: List = search_block_el.find_all("div", attrs={'class': "panel panel-default"})
-        print(f'Found {len(hour_els)} hours available')
+        # print(f'Found {len(hour_els)} hours available')
         for hour_el in hour_els:
             # find hour
             hour_str = hour_el.find("div", attrs={'class': 'panel-heading'})
@@ -157,17 +159,20 @@ class ParisTennis:
                 tennis_court.available_hours_courts.append(tennis_type)
 
     async def check_all_availabilities(self):
-        await self.select_a_court()
-        await self.page.wait_for_timeout(5000)
+        tqdm_bar = tqdm(self.tennis_names)
 
-        await self.get_available_dates()
-        # print(self.tennis_summaries)
-        await self.loop_through_week()
-        await self.page.wait_for_timeout(10000)
+        for tennis_name in tqdm_bar:
+            tqdm_bar.set_description(f'Searching for courts at: {tennis_name}')
+            await self.select_a_court(tennis_name=tennis_name)
+            await self.page.wait_for_timeout(5000)
+            tennis_court_summary = await self.get_available_dates(tennis_name=tennis_name)
+            await self.loop_through_week(tennis_court_summary=tennis_court_summary)
+            await self.page.close()
+            await self.browser.close()
+
         print(self.tennis_summaries)
 
-
 if __name__ == '__main__':
-    paris_tennis = ParisTennis()
+    paris_tennis = ParisTennis(headless=True)
 
     asyncio.get_event_loop().run_until_complete(paris_tennis.check_all_availabilities())
