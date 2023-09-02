@@ -1,12 +1,12 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Union, Optional
-from bs4 import BeautifulSoup as bs
 
+from bs4 import BeautifulSoup as bs
 from playwright.async_api import async_playwright, Page, Browser, Locator, TimeoutError
 
 from paris_tennis.app_config import get_tennis_names
-from dataclasses import dataclass
 
 
 @dataclass(repr=True)
@@ -29,7 +29,7 @@ class ParisTennis:
     async def start_browser(self):
         if not self.page:
             self.APW = await async_playwright().start()
-            self.browser = await self.APW.firefox.launch(headless=self.headless)
+            self.browser = await self.APW.webkit.launch(headless=self.headless)
             self.page = await self.browser.new_page()
 
     async def select_a_court(self, court_name: Optional[str] = None):
@@ -79,15 +79,23 @@ class ParisTennis:
         return self.tennis_summaries
 
     async def loop_through_week(self):
+        await self.page.wait_for_timeout(5000)
+        week_days_xpath: str = "xpath=// div[contains(@class,'date-item')]"
         # find date elements
-        week_date_els: List[Locator] = await self.page.locator("xpath=// div[@class='date-item']").all()
+        week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
         print(f'Size of date elements: {len(week_date_els)}')
-        for week_date_el in week_date_els:
-            print(await week_date_el.text_content())
+        for index, week_date_el in enumerate(week_date_els, start=0):
+            print(f'Day: {index + 1}')
             try:
-                await week_date_el.click(delay=2000)
-            except TimeoutError:
+                # print(await week_date_els[index].text_content())
+                await week_date_els[index].click(delay=100)
+                # await self.page.wait_for_load_state(state="domcontentloaded")
+                await self.page.wait_for_timeout(5000)
+            except TimeoutError as ex:
+                print(ex)
                 print(f"Error while clicking on element")
+            # refresh the list of elements as class names changes with JS selection
+            week_date_els: List[Locator] = await self.page.locator(week_days_xpath).all()
 
 
     async def check_all_availabilities(self):
@@ -97,7 +105,7 @@ class ParisTennis:
         await self.get_available_dates()
         print(self.tennis_summaries)
         await self.loop_through_week()
-        await self.page.wait_for_timeout(50000)
+        await self.page.wait_for_timeout(10000)
 
 
 if __name__ == '__main__':
