@@ -1,4 +1,6 @@
 import asyncio
+import platform
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -56,7 +58,12 @@ class ParisTennis:
     async def start_browser(self):
         if not self.page or not self.browser or self.page.is_closed() or not self.browser.is_connected():
             self.APW = await async_playwright().start()
-            self.browser = await self.APW.firefox.launch(headless=self.headless)
+            if platform.system()[:3].lower() == "win":
+                self.browser = await self.APW.webkit.launch(headless=self.headless)
+                print("Windows detected: running Webkit")
+            else:
+                self.browser = await self.APW.firefox.launch(headless=self.headless)
+                print("Linux assumed: running Firefox")
             self.page = await self.browser.new_page()
 
     async def select_a_court(self, tennis_name: Optional[str] = None):
